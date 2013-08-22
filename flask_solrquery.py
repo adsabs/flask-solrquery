@@ -24,7 +24,7 @@ solr = LocalProxy(lambda: current_app.extensions['solr'])
 
 class FlaskSolrQuery(object):
     """
-    Connection to a solr instance using SOLR_URL parameter defined
+    Connection to a solr instance using SOLRQUERY_URL parameter defined
     in Flask configuration
     """
     
@@ -39,11 +39,13 @@ class FlaskSolrQuery(object):
         if config is None:
             config = app.config
 
-        config.setdefault("SOLR_URL", "http://localhost:8983/solr")
-        config.setdefault("SOLR_KEEPALIVE", False)
-        config.setdefault("SOLR_TIMEOUT", 10)
+        config.setdefault("SOLRQUERY_URL", "http://localhost:8983/solr")
+        config.setdefault("SOLRQUERY_KEEPALIVE", False)
+        config.setdefault("SOLRQUERY_TIMEOUT", 10)
+        config.setdefault("SOLRQUERY_RESPONSE_CLASS", SearchResponse)
 
         self._set_session(app, config)
+        self.response_class = config['SOLRQUERY_RESPONSE_CLASS']
         
         if not hasattr(app, 'extensions'):
             app.extensions = {}
@@ -54,7 +56,7 @@ class FlaskSolrQuery(object):
     def _set_session(self, app, config):
         
         self.session = requests.Session()
-        self.session.keep_alive = config['SOLR_KEEPALIVE']
+        self.session.keep_alive = config['SOLRQUERY_KEEPALIVE']
 
     def add_request_adapter(self, scheme, adapter):
         self.session.mount(scheme, adapter)
@@ -66,7 +68,7 @@ class FlaskSolrQuery(object):
     def create_request(self, q, rows=None, start=None, sort=None, query_fields=None, 
               filter_queries=[], fields=[], facets=[], highlights=[], **kwargs):
 
-        req = SolrRequest(q, rows=rows)
+        req = SearchRequest(q, rows=rows)
     
         if start:
             req.set_start(start)
@@ -100,16 +102,16 @@ class FlaskSolrQuery(object):
     
     def get_response(self, req):
         
-        prepared_req = req.prepare_request(self.app.config['SOLR_URL'])
+        prepared_req = req.prepare_request(self.app.config['SOLRQUERY_URL'])
         http_status, raw_data = self._get_raw_response(prepared_req)
 
-        return SolrResponse(raw_data, req)
+        return self.response_class(raw_data, req)
     
     def _get_raw_response(self, prepared_req):
         
         http_resp = None
         try:
-            http_resp = self.session.send(prepared_req, timeout=self.app.config['SOLR_TIMEOUT'])
+            http_resp = self.session.send(prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
             return (http_resp.status_code, http_resp.json())
         except requests.RequestException, e:
             error_msg = "Something blew up when querying solr: %s; request url: %s" % \
@@ -121,14 +123,14 @@ class FlaskSolrQuery(object):
                 http_resp.close()
         
 
-class SolrRequest(object):
+class SearchRequest(object):
     """
-    Basically just an interface to a dict (SolrParams) of
+    Basically just an interface to a dict (SearchParams) of
     params to be sent to solr
     """
     def __init__(self, q, **kwargs):
         self.q = q
-        self.params = SolrParams(q=q, **kwargs)
+        self.params = SearchParams(q=q, **kwargs)
         
     def prepare_request(self, solr_url):
         r = requests.Request('GET', solr_url, params=self.params.get_dict())
@@ -252,7 +254,7 @@ class SolrRequest(object):
                 highlights.append((fl, count, fragsize))
         return highlights
     
-class SolrParams(dict):
+class SearchParams(dict):
     """
     Simple dictionary wrapper that allows some keys to contain lists
     of values
@@ -284,7 +286,7 @@ class SolrParams(dict):
         if val not in self[key]:
             self[key].append(val)
                                 
-class SolrResponse(object):
+class SearchResponse(object):
     """
     Wrapper for the response data returned by solr
     """
@@ -390,3 +392,5 @@ class SolrResponse(object):
     def get_qtime(self):
         return self.raw.get('responseHeader',{}).get('QTime')
     
+__all__ = ['FlaskSolrQuery','SearchResponse','SearchRequest','solr']
+
