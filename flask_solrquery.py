@@ -17,6 +17,8 @@ from copy import deepcopy
 from simplejson import loads, JSONDecodeError
 
 from flask import current_app, g
+from werkzeug.local import LocalProxy
+from flask import _app_ctx_stack as stack
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +50,8 @@ class FlaskSolrQuery(object):
             app.extensions = {}
         
         app.extensions['solr'] = self
-        app.before_request(self.request_start)
+        stack.top.solr = self
         
-    def request_start(self):
-        g.solr = self
-
     def _set_session(self, app, config):
         
         self.session = requests.Session()
@@ -94,7 +93,7 @@ class FlaskSolrQuery(object):
         for hl in highlights:
             req.add_highlight(*hl)
         
-        # allow for manual overrides
+        # pass any additional kwargs on to the request params
         if len(kwargs):
             req.set_params(**kwargs)
         
@@ -392,3 +391,7 @@ class SolrResponse(object):
     def get_qtime(self):
         return self.raw.get('responseHeader',{}).get('QTime')
     
+from functools import partial
+from flask.globals import _lookup_app_object
+solr = LocalProxy(partial(_lookup_app_object, 'solr'))    
+
