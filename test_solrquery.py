@@ -6,7 +6,7 @@ import random
 import string
 
 from flask import Flask, render_template, render_template_string
-from flask.ext.solr_query import FlaskSolrQuery
+from flask.ext.solrquery import FlaskSolrQuery
 
 if sys.version_info < (2,7):
     import unittest2 as unittest

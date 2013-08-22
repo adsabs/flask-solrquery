@@ -9,13 +9,13 @@ from setuptools import setup
 setup(
     name='Flask-SolrQuery',
     version='0.1',
-    url='http://github.com/flask-solr-query',
+    url='http://github.com/flask-solrquery',
     license='MIT',
     author='Jay Luker',
     author_email='jay.luker@gmail.com',
     description='A Flask extension for querying solr',
     long_description=__doc__,
-    py_modules=['flask_solr_query'],
+    py_modules=['flask_solrquery'],
     install_requires=[
         'Flask',
         'requests'
