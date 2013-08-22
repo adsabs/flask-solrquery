@@ -14,13 +14,13 @@ import logging
 import requests
 from math import ceil
 from copy import deepcopy
-from simplejson import loads, JSONDecodeError
 
 from flask import current_app, g
 from werkzeug.local import LocalProxy
-from flask import _app_ctx_stack as stack
 
 logger = logging.getLogger(__name__)
+
+solr = LocalProxy(lambda: current_app.extensions['solr'])    
 
 class FlaskSolrQuery(object):
     """
@@ -40,7 +40,6 @@ class FlaskSolrQuery(object):
             config = app.config
 
         config.setdefault("SOLR_URL", "http://localhost:8983/solr")
-        config.setdefault("SOLR_DEFAULT_ROWS", 20)
         config.setdefault("SOLR_KEEPALIVE", False)
         config.setdefault("SOLR_TIMEOUT", 10)
 
@@ -50,8 +49,8 @@ class FlaskSolrQuery(object):
             app.extensions = {}
         
         app.extensions['solr'] = self
-        stack.top.solr = self
-        
+        return self
+    
     def _set_session(self, app, config):
         
         self.session = requests.Session()
@@ -391,7 +390,3 @@ class SolrResponse(object):
     def get_qtime(self):
         return self.raw.get('responseHeader',{}).get('QTime')
     
-from functools import partial
-from flask.globals import _lookup_app_object
-solr = LocalProxy(partial(_lookup_app_object, 'solr'))    
-
