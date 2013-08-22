@@ -1,5 +1,3 @@
-flask-solr-query
-============
 
 Flask extension for querying solr
 
