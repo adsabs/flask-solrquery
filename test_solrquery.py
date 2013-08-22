@@ -6,7 +6,7 @@ import random
 import string
 
 from flask import Flask, render_template, render_template_string
-from flask.ext.solrquery import FlaskSolrQuery
+from flask.ext.solrquery import FlaskSolrQuery, solr
 
 if sys.version_info < (2,7):
     import unittest2 as unittest
@@ -24,7 +24,7 @@ class FlaskSolrTestCase(unittest.TestCase):
         self.solr = FlaskSolrQuery(app)
         self.app = app
 
-        self.resp_data = {
+        resp_data = {
              "responseHeader":{
                "status":0,
                "QTime":1,
@@ -48,6 +48,10 @@ class FlaskSolrTestCase(unittest.TestCase):
                         { "id": 13 }, 
             ]}}
         
+        def _monkey_patched(slf):
+            return 200, resp_data
+        
+        self.solr._get_raw_response = _monkey_patched
         
     def tearDown(self):
         
@@ -56,14 +60,16 @@ class FlaskSolrTestCase(unittest.TestCase):
         
     def test_00_query(self):
 
-        def _monkey_patched(slf):
-            return 200, self.resp_data
-        
-        self.solr._get_raw_response = _monkey_patched
-
         req = self.solr.create_request("black holes")
         resp = self.solr.get_response(req)
         self.assertEqual(resp.get_hits(), 13)
+        
+    def test_01_reqest_context(self):
+        
+        with self.app.test_request_context('/'):
+            resp = solr.query("black holes")
+            self.assertEqual(resp.get_hits(), 13)
+        
     
 if __name__ == '__main__':
     unittest.main()
