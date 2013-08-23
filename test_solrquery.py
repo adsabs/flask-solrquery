@@ -4,9 +4,18 @@ import os
 import time
 import random
 import string
+from copy import deepcopy
+from mock import Mock, patch
 
+FIXTURES_OK = True
+try:
+    import fixtures
+except ImportError:
+    print "fixtures library not found. some tests will be skipped"
+    FIXTURES_OK = False
+    
 from flask import Flask, render_template, render_template_string
-from flask.ext.solrquery import FlaskSolrQuery, solr
+from flask.ext.solrquery import FlaskSolrQuery, SearchResponseMixin, solr
 
 if sys.version_info < (2,7):
     import unittest2 as unittest
@@ -15,16 +24,7 @@ else:
 
 class FlaskSolrTestCase(unittest.TestCase):
     
-    def setUp(self):
-        app = Flask(__name__, template_folder=os.path.dirname(__file__))
-        app.debug = True
-        app.config['TESTING'] = True
-        app.config['SOLR_URL'] = 'http://httpbin.org/get'
-        
-        self.solr = FlaskSolrQuery(app)
-        self.app = app
-
-        resp_data = {
+    DEFAULT_RESPONSE = {
              "responseHeader":{
                "status":0,
                "QTime":1,
@@ -47,11 +47,15 @@ class FlaskSolrTestCase(unittest.TestCase):
                         { "id": 12 }, 
                         { "id": 13 }, 
             ]}}
+    
+    def setUp(self):
+        app = Flask(__name__, template_folder=os.path.dirname(__file__))
+        app.debug = True
+        app.config['TESTING'] = True
+        app.config['SOLRQUERY_URL'] = 'http://httpbin.org/get'
         
-        def _monkey_patched(slf):
-            return 200, resp_data
-        
-        self.solr._get_raw_response = _monkey_patched
+        self.solr = FlaskSolrQuery(app)
+        self.app = app
         
     def tearDown(self):
         
@@ -70,6 +74,5 @@ class FlaskSolrTestCase(unittest.TestCase):
             resp = solr.query("black holes")
             self.assertEqual(resp.get_hits(), 13)
         
-    
 if __name__ == '__main__':
     unittest.main()

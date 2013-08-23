@@ -30,6 +30,7 @@ class FlaskSolrQuery(object):
     
     def __init__(self, app=None):
         self.app = app
+        self.response_loader = None
         if app is not None:
             self.init_app(app)
             
@@ -42,10 +43,9 @@ class FlaskSolrQuery(object):
         config.setdefault("SOLRQUERY_URL", "http://localhost:8983/solr")
         config.setdefault("SOLRQUERY_KEEPALIVE", False)
         config.setdefault("SOLRQUERY_TIMEOUT", 10)
-        config.setdefault("SOLRQUERY_RESPONSE_CLASS", SearchResponse)
 
         self._set_session(app, config)
-        self.response_class = config['SOLRQUERY_RESPONSE_CLASS']
+        self.response_loader = self._default_loader
         
         if not hasattr(app, 'extensions'):
             app.extensions = {}
@@ -58,6 +58,15 @@ class FlaskSolrQuery(object):
         self.session = requests.Session()
         self.session.keep_alive = config['SOLRQUERY_KEEPALIVE']
 
+    def _default_loader(self, json, request, **kwargs):
+        return SearchResponseMixin(json, request=request)
+    
+    def response_callback(self, callback):
+        self.response_loader = callback
+        
+    def error_callback(self, callback):
+        self.error_handler = callback
+        
     def add_request_adapter(self, scheme, adapter):
         self.session.mount(scheme, adapter)
         
@@ -102,25 +111,18 @@ class FlaskSolrQuery(object):
     
     def get_response(self, req):
         
-        prepared_req = req.prepare_request(self.app.config['SOLRQUERY_URL'])
-        http_status, raw_data = self._get_raw_response(prepared_req)
+        prepared_req = req.prepare(self.app.config['SOLRQUERY_URL'])
 
-        return self.response_class(raw_data, req)
-    
-    def _get_raw_response(self, prepared_req):
-        
-        http_resp = None
         try:
             http_resp = self.session.send(prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
-            return (http_resp.status_code, http_resp.json())
+            return self.response_loader(http_resp.json(), request=req, http_response=http_resp)
         except requests.RequestException, e:
-            error_msg = "Something blew up when querying solr: %s; request url: %s" % \
-                             (e, prepared_req.url)
-            logger.error(error_msg)
-            raise
-        finally:
-            if http_resp:
-                http_resp.close()
+            if hasattr(self, 'error_callback'):
+                return self.error_callback(e)
+            else:
+                error_msg = "Something blew up when querying solr: %s; request url: %s" % \
+                                 (e, prepared_req.url)
+                logger.error(error_msg)
         
 
 class SearchRequest(object):
@@ -132,7 +134,7 @@ class SearchRequest(object):
         self.q = q
         self.params = SearchParams(q=q, **kwargs)
         
-    def prepare_request(self, solr_url):
+    def prepare(self, solr_url):
         r = requests.Request('GET', solr_url, params=self.params.get_dict())
         self.prepared = r.prepare()
         return self.prepared
@@ -286,7 +288,7 @@ class SearchParams(dict):
         if val not in self[key]:
             self[key].append(val)
                                 
-class SearchResponse(object):
+class SearchResponseMixin(object):
     """
     Wrapper for the response data returned by solr
     """
@@ -392,5 +394,5 @@ class SearchResponse(object):
     def get_qtime(self):
         return self.raw.get('responseHeader',{}).get('QTime')
     
-__all__ = ['FlaskSolrQuery','SearchResponse','SearchRequest','solr']
+__all__ = ['FlaskSolrQuery','SearchResponseMixing','SearchRequest','solr']
 
