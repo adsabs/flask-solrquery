@@ -37,6 +37,9 @@ class FlaskSolrQuery(object):
     def init_app(self, app, config=None):
         "Initialize the solr extension"
 
+        if self.app is None:
+            self.app = app
+            
         if config is None:
             config = app.config
 
@@ -76,17 +79,29 @@ class FlaskSolrQuery(object):
 
     def create_request(self, q, rows=None, start=None, sort=None, query_fields=None, 
               filter_queries=[], fields=[], facets=[], highlights=[], **kwargs):
+        """
+        q - search terms as a string (str)
+        rows - number of results to return (int)
+        start - index position in total result set to start with (int)
+        sort - tuple in the form of (field, direction) where direction is 'desc' or 'asc'
+        query_fields - value to pass to solr as the qf param (str)
+        filter_queries - list of fq param values
+        fields - list of fields to pass as the fl param
+        facets - list of tuples of the form (field, limit, mincount, output key, prefix)
+        highlights - list of tuples of the form (field, snippet count, fragment size)
+        **kwargs - any additional query string params to pass directly to solr 
+        """
 
-        req = SearchRequest(q, rows=rows)
+        req = SearchRequest(q)
     
-        if start:
+        if start is not None:
             req.set_start(start)
             
-        if rows:
+        if rows is not None:
             req.set_rows(rows)
         
-        if sort:
-            req.add_sort(sort)
+        if sort is not None:
+            req.add_sort(*sort)
 
         for fq in filter_queries:
             req.add_filter_query(fq)
@@ -109,9 +124,13 @@ class FlaskSolrQuery(object):
         
         return req        
     
-    def get_response(self, req):
+    def get_response(self, req, solrquery_url=None):
         
-        prepared_req = req.prepare(self.app.config['SOLRQUERY_URL'])
+        # allow for overriding query url
+        if solrquery_url is None:
+            solrquery_url = self.app.config['SOLRQUERY_URL']
+            
+        prepared_req = req.prepare(solrquery_url)
 
         try:
             http_resp = self.session.send(prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
@@ -169,21 +188,21 @@ class SearchRequest(object):
         self.params.qf = query_fields
         return self
 
-    def set_sort(self, sort):
-        self.params.sort = sort
+    def set_sort(self, sort_field, direction):
+        self.params.sort = "%s %s" % (sort_field, direction)
         return self
         
-    def add_sort(self, sort):
+    def add_sort(self, sort_field, direction):
         if not self.params.has_key('sort'):
-            self.set_sort(sort)
+            self.set_sort(sort_field, direction)
         else:
-            self.params.sort += ',%s' % sort
+            self.params.sort += ',%s %s' % (sort_field, direction)
         return self
         
     def get_sort(self):
+        sort = []
         if self.params.has_key('sort'):
-            return self.params.sort.split(',')
-        return []
+            return [tuple(x.split()) for x in self.params.sort.split(',')]
     
     def set_hlq(self, hlq):
         self.params['hl.q'] = hlq
@@ -193,7 +212,7 @@ class SearchRequest(object):
         self.params.append('fq', fq)
         return self
         
-    def get_filters_queries(self):
+    def get_filter_queries(self):
         return self.params.get('fq', [])
         
     def add_facet(self, field, limit=None, mincount=None, output_key=None, prefix=None):
@@ -333,9 +352,6 @@ class SearchResponseMixin(object):
     def get_all_facet_fields(self):
         return self.get_all_facets().get('facet_fields',{})
     
-    def get_all_facet_queries(self):
-        return self.get_all_facets().get('facet_queries',{})
-    
     def get_query(self):
         return self.raw.get('responseHeader',{}).get('params',{}).get('q')
     
@@ -361,13 +377,13 @@ class SearchResponseMixin(object):
         """
         return self.raw.get('response',{}).get('start',0)
     
-    def get_pagination(self, rows_per_page):
+    def get_pagination(self, rows_per_page=10, max_pagination_len=5):
         """
         Returns a dictionary containing all the informations
         about the status of the pagination 
         """
+        
         if not hasattr(self, 'pagination'):
-            max_pagination_len = 5 #maybe we want to put this in the configuration
             num_total_pages = int(ceil(float(self.get_hits()) / float(rows_per_page)))
             current_page = (int(self.get_start_count()) / rows_per_page) + 1
             max_num_pages_before = int(ceil(min(max_pagination_len, num_total_pages) / 2.0)) - 1
@@ -389,10 +405,11 @@ class SearchResponseMixin(object):
                    'pages_before': pages_before,
                    'pages_after': pages_after,       
             }
+
         return self.pagination
     
     def get_qtime(self):
         return self.raw.get('responseHeader',{}).get('QTime')
     
-__all__ = ['FlaskSolrQuery','SearchResponseMixing','SearchRequest','solr']
+__all__ = ['FlaskSolrQuery','SearchResponseMixin','SearchRequest','solr']
 
