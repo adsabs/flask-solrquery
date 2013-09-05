@@ -76,9 +76,6 @@ class FlaskSolrQuery(object):
     def response_callback(self, callback):
         self.response_loader = callback
         
-    def error_callback(self, callback):
-        self.error_handler = callback
-        
     def add_request_adapter(self, scheme, adapter):
         self.session.mount(scheme, adapter)
         
@@ -147,13 +144,10 @@ class FlaskSolrQuery(object):
             signals.search_signal.send(self, response=resp)
             return resp
         except requests.RequestException, e:
-            if hasattr(self, 'error_handler'):
-                return self.error_handler(e)
-            else:
-                error_msg = "Something blew up when querying solr: %s; request url: %s" % \
-                                 (e, self.prepared_req.url)
-                signals.error_signal.send(self, error_msg=error_msg)
-                logger.error(error_msg)
+            signals.error_signal.send(self, exc=e, request=req)
+            error_msg = "Something blew up when querying solr: %s; request url: %s" % \
+                             (e, self.prepared_req.url)
+            logger.error(error_msg)
         
 
 class SearchRequest(object):
