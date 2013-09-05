@@ -17,10 +17,19 @@ from copy import deepcopy
 
 from flask import current_app, g
 from werkzeug.local import LocalProxy
+import signals
 
 logger = logging.getLogger(__name__)
 
 solr = LocalProxy(lambda: current_app.extensions['solr'])    
+
+__all__ = [
+           'FlaskSolrQuery',
+           'SearchResponseMixin',
+           'SearchRequest',
+           'solr',
+           'signals'
+           ]
 
 class FlaskSolrQuery(object):
     """
@@ -130,17 +139,20 @@ class FlaskSolrQuery(object):
         if solrquery_url is None:
             solrquery_url = self.app.config['SOLRQUERY_URL']
             
-        prepared_req = req.prepare(solrquery_url)
+        self.prepared_req = req.prepare(solrquery_url)
 
         try:
-            http_resp = self.session.send(prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
-            return self.response_loader(http_resp.json(), request=req, http_response=http_resp)
+            http_resp = self.session.send(self.prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
+            resp = self.response_loader(http_resp.json(), request=req, http_response=http_resp)
+            signals.search_signal.send(self, response=resp)
+            return resp
         except requests.RequestException, e:
             if hasattr(self, 'error_callback'):
                 return self.error_callback(e)
             else:
                 error_msg = "Something blew up when querying solr: %s; request url: %s" % \
-                                 (e, prepared_req.url)
+                                 (e, self.prepared_req.url)
+                signals.error_signal.send(self, error_msg=error_msg)
                 logger.error(error_msg)
         
 
@@ -156,6 +168,7 @@ class SearchRequest(object):
     def prepare(self, solr_url):
         r = requests.Request('GET', solr_url, params=self.params.get_dict())
         self.prepared = r.prepare()
+        self.url = self.prepared.url
         return self.prepared
         
     def set_params(self, **kwargs):
@@ -274,6 +287,9 @@ class SearchRequest(object):
                 fragsize = self.params.get('f.%s.hl.fragsize' % fl, None)
                 highlights.append((fl, count, fragsize))
         return highlights
+    
+    def get_param(self, param_name):
+        return self.params.get(param_name, None)
     
 class SearchParams(dict):
     """
@@ -411,5 +427,3 @@ class SearchResponseMixin(object):
     def get_qtime(self):
         return self.raw.get('responseHeader',{}).get('QTime')
     
-__all__ = ['FlaskSolrQuery','SearchResponseMixin','SearchRequest','solr']
-
