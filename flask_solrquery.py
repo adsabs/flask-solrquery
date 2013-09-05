@@ -147,8 +147,8 @@ class FlaskSolrQuery(object):
             signals.search_signal.send(self, response=resp)
             return resp
         except requests.RequestException, e:
-            if hasattr(self, 'error_callback'):
-                return self.error_callback(e)
+            if hasattr(self, 'error_handler'):
+                return self.error_handler(e)
             else:
                 error_msg = "Something blew up when querying solr: %s; request url: %s" % \
                                  (e, self.prepared_req.url)
