@@ -107,11 +107,12 @@ class FlaskSolrTestCase(unittest.TestCase, fixtures.TestWithFixtures):
         prepared = req.prepare("http://example.com/select", method='POST')
         self.assertEqual(prepared.method, 'POST')
 
-        self.app.config['SOLRQUERY_HTTP_METHOD'] = 'POST'
         with self.app.test_request_context():
+            solr.request_http_method = 'POST'
             with fake_solr_http_response():
                 resp = solr.query("black holes")
                 self.assertEqual(resp.request.prepared.method, 'POST')
+            solr.request_http_method = 'GET'
         
 class SolrTestCase(unittest.TestCase):
 

@@ -37,18 +37,21 @@ class FlaskSolrQuery(object):
     in Flask configuration
     """
     
-    def __init__(self, app=None):
+    def __init__(self, app=None, config=None):
         self.app = app
+        self.config = config
         self.response_loader = None
         if app is not None:
-            self.init_app(app)
+            self.init_app(app, config)
             
     def init_app(self, app, config=None):
         "Initialize the solr extension"
 
-        if self.app is None:
-            self.app = app
-            
+        if not (config is None or isinstance(config, dict)):
+            raise ValueError("`config` must be an instance of dict or None")
+
+        if config is None:
+            config = self.config
         if config is None:
             config = app.config
 
@@ -57,7 +60,10 @@ class FlaskSolrQuery(object):
         config.setdefault("SOLRQUERY_TIMEOUT", 10)
         config.setdefault("SOLRQUERY_HTTP_METHOD", "GET")
 
-        self._set_session(app, config)
+        self._set_session(config)
+        self.request_http_method = config['SOLRQUERY_HTTP_METHOD']
+        self.base_url = config['SOLRQUERY_URL']
+        self.timeout = config['SOLRQUERY_TIMEOUT']
         self.response_loader = self._default_loader
         
         if not hasattr(app, 'extensions'):
@@ -66,7 +72,7 @@ class FlaskSolrQuery(object):
         app.extensions['solr'] = self
         return self
     
-    def _set_session(self, app, config):
+    def _set_session(self, config):
         
         self.session = requests.Session()
         self.session.keep_alive = config['SOLRQUERY_KEEPALIVE']
@@ -131,16 +137,16 @@ class FlaskSolrQuery(object):
         
         return req        
     
-    def get_response(self, req, solrquery_url=None):
+    def get_response(self, req, base_url=None):
         
         # allow for overriding query url
-        if solrquery_url is None:
-            solrquery_url = self.app.config['SOLRQUERY_URL']
+        if base_url is None:
+            base_url = self.base_url
             
-        self.prepared_req = req.prepare(solrquery_url, method=self.app.config['SOLRQUERY_HTTP_METHOD'])
+        self.prepared_req = req.prepare(base_url, method=self.request_http_method)
 
         try:
-            http_resp = self.session.send(self.prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
+            http_resp = self.session.send(self.prepared_req, timeout=self.timeout)
             resp = self.response_loader(http_resp.json(), request=req, http_response=http_resp)
             signals.search_signal.send(self, response=resp)
             return resp
