@@ -55,6 +55,7 @@ class FlaskSolrQuery(object):
         config.setdefault("SOLRQUERY_URL", "http://localhost:8983/solr")
         config.setdefault("SOLRQUERY_KEEPALIVE", False)
         config.setdefault("SOLRQUERY_TIMEOUT", 10)
+        config.setdefault("SOLRQUERY_HTTP_METHOD", "GET")
 
         self._set_session(app, config)
         self.response_loader = self._default_loader
@@ -136,7 +137,7 @@ class FlaskSolrQuery(object):
         if solrquery_url is None:
             solrquery_url = self.app.config['SOLRQUERY_URL']
             
-        self.prepared_req = req.prepare(solrquery_url)
+        self.prepared_req = req.prepare(solrquery_url, method=self.app.config['SOLRQUERY_HTTP_METHOD'])
 
         try:
             http_resp = self.session.send(self.prepared_req, timeout=self.app.config['SOLRQUERY_TIMEOUT'])
@@ -159,8 +160,8 @@ class SearchRequest(object):
         self.q = q
         self.params = SearchParams(q=q, **kwargs)
         
-    def prepare(self, solr_url):
-        r = requests.Request('GET', solr_url, params=self.params.get_dict())
+    def prepare(self, solr_url, method='GET'):
+        r = requests.Request(method, solr_url, params=self.params.get_dict())
         self.prepared = r.prepare()
         self.url = self.prepared.url
         return self.prepared

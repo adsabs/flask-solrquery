@@ -51,7 +51,8 @@ class FakeSolrHttpResponse(object):
                         { "id": 12 }, 
                         { "id": 13 }, 
             ]}}
-    def __init__(self, data=None, status_code=200):
+    def __init__(self, request, data=None, status_code=200):
+        self.request = request
         self.status_code = status_code
         self.data = data
         if self.data is None:
@@ -62,8 +63,8 @@ class FakeSolrHttpResponse(object):
 
 @contextmanager
 def fake_solr_http_response(data=None, status_code=200):
-    def fake_send(*args, **kwargs):
-        return FakeSolrHttpResponse(data, status_code)
+    def fake_send(session_self, request, *args, **kwargs):
+        return FakeSolrHttpResponse(request, data, status_code)
     mocked_send = patch("flask_solrquery.requests.sessions.Session.send", fake_send)
     mocked_send.start()
     yield
@@ -98,6 +99,19 @@ class FlaskSolrTestCase(unittest.TestCase, fixtures.TestWithFixtures):
             with fake_solr_http_response():
                 resp = solr.query("black holes")
                 self.assertEqual(resp.get_hits(), 13)
+        
+    def test_02_solr_request_http_method(self):
+        req = SearchRequest("foo")
+        prepared = req.prepare("http://example.com/select")
+        self.assertEqual(prepared.method, 'GET')
+        prepared = req.prepare("http://example.com/select", method='POST')
+        self.assertEqual(prepared.method, 'POST')
+
+        self.app.config['SOLRQUERY_HTTP_METHOD'] = 'POST'
+        with self.app.test_request_context():
+            with fake_solr_http_response():
+                resp = solr.query("black holes")
+                self.assertEqual(resp.request.prepared.method, 'POST')
         
 class SolrTestCase(unittest.TestCase):
 
