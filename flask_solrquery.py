@@ -59,11 +59,13 @@ class FlaskSolrQuery(object):
         config.setdefault("SOLRQUERY_KEEPALIVE", False)
         config.setdefault("SOLRQUERY_TIMEOUT", 10)
         config.setdefault("SOLRQUERY_HTTP_METHOD", "GET")
+        config.setdefault("SOLRQUERY_EXTRA_PARAMS", None)
 
         self._set_session(config)
         self.request_http_method = config['SOLRQUERY_HTTP_METHOD']
         self.base_url = config['SOLRQUERY_URL']
         self.timeout = config['SOLRQUERY_TIMEOUT']
+        self.extra_params = config['SOLRQUERY_EXTRA_PARAMS']
         self.response_loader = self._default_loader
         
         if not hasattr(app, 'extensions'):
@@ -134,7 +136,7 @@ class FlaskSolrQuery(object):
         # pass any additional kwargs on to the request params
         if len(kwargs):
             req.set_params(**kwargs)
-        
+            
         return req        
     
     def get_response(self, req, base_url=None):
@@ -143,16 +145,21 @@ class FlaskSolrQuery(object):
         if base_url is None:
             base_url = self.base_url
             
-        self.prepared_req = req.prepare(base_url, method=self.request_http_method)
+        # add any configured extra params that are sent with every request
+        if self.extra_params is not None:
+            extra = dict(self.extra_params)
+            req.set_params(**extra)
+        
+        prepared_req = req.prepare(base_url, method=self.request_http_method)
 
         try:
-            http_resp = self.session.send(self.prepared_req, timeout=self.timeout)
+            http_resp = self.session.send(prepared_req, timeout=self.timeout)
             resp = self.response_loader(http_resp.json(), request=req, http_response=http_resp)
             signals.search_signal.send(self, response=resp)
             return resp
         except requests.RequestException, e:
             error_msg = "Something blew up when querying solr: %s; request url: %s" % \
-                             (e, self.prepared_req.url)
+                             (e, prepared_req.url)
             logger.error(error_msg)
             signals.error_signal.send(self, exc=e, request=req)
             raise
@@ -349,7 +356,7 @@ class SearchResponseMixin(object):
             if self.request.highlights_on() and self.raw.has_key('highlighting'):
                 for doc in docset:
                     doc['highlights'] = self.raw['highlighting'][doc['id']]
-            return self.raw['response'].get('docs', [])
+            return docset
         else:
             return []
     
