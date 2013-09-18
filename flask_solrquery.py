@@ -55,7 +55,7 @@ class FlaskSolrQuery(object):
         if config is None:
             config = app.config
 
-        config.setdefault("SOLRQUERY_URL", "http://localhost:8983/solr")
+        config.setdefault("SOLRQUERY_URL", "http://localhost:8983/solr/collection1/select")
         config.setdefault("SOLRQUERY_KEEPALIVE", False)
         config.setdefault("SOLRQUERY_TIMEOUT", 10)
         config.setdefault("SOLRQUERY_HTTP_METHOD", "GET")
@@ -63,7 +63,7 @@ class FlaskSolrQuery(object):
 
         self._set_session(config)
         self.request_http_method = config['SOLRQUERY_HTTP_METHOD']
-        self.base_url = config['SOLRQUERY_URL']
+        self.query_url = config['SOLRQUERY_URL']
         self.timeout = config['SOLRQUERY_TIMEOUT']
         self.extra_params = config['SOLRQUERY_EXTRA_PARAMS']
         self.response_loader = self._default_loader
@@ -88,9 +88,9 @@ class FlaskSolrQuery(object):
     def add_request_adapter(self, scheme, adapter):
         self.session.mount(scheme, adapter)
         
-    def query(self, *args, **kwargs):
-        req = self.create_request(*args, **kwargs)
-        return self.get_response(req)
+    def query(self, q, query_url=None, **kwargs):
+        req = self.create_request(q, **kwargs)
+        return self.get_response(req, query_url)
 
     def create_request(self, q, rows=None, start=None, sort=None, query_fields=None, 
               filter_queries=[], fields=[], facets=[], highlights=[], **kwargs):
@@ -139,18 +139,18 @@ class FlaskSolrQuery(object):
             
         return req        
     
-    def get_response(self, req, base_url=None):
+    def get_response(self, req, query_url=None):
         
         # allow for overriding query url
-        if base_url is None:
-            base_url = self.base_url
+        if query_url is None:
+            query_url = self.query_url
             
         # add any configured extra params that are sent with every request
         if self.extra_params is not None:
             extra = dict(self.extra_params)
             req.set_params(**extra)
         
-        prepared_req = req.prepare(base_url, method=self.request_http_method)
+        prepared_req = req.prepare(query_url, method=self.request_http_method)
 
         try:
             http_resp = self.session.send(prepared_req, timeout=self.timeout)
