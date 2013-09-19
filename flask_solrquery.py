@@ -92,7 +92,7 @@ class FlaskSolrQuery(object):
         req = self.create_request(q, **kwargs)
         return self.get_response(req, query_url)
 
-    def create_request(self, q, rows=None, start=None, sort=None, query_fields=None, 
+    def create_request(self, q, rows=None, start=None, sort=[], query_fields=None, 
               filter_queries=[], fields=[], facets=[], highlights=[], **kwargs):
         """
         q - search terms as a string (str)
@@ -115,8 +115,8 @@ class FlaskSolrQuery(object):
         if rows is not None:
             req.set_rows(rows)
         
-        if sort is not None:
-            req.add_sort(*sort)
+        for sort_field in sort:
+            req.add_sort(*sort_field)
 
         for fq in filter_queries:
             req.add_filter_query(fq)
