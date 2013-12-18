@@ -70,7 +70,7 @@ def fake_solr_http_response(data=None, status_code=200):
     yield
     mocked_send.stop()
             
-class FlaskSolrTestCase(unittest.TestCase, fixtures.TestWithFixtures):
+class FlaskSolrTestCase(fixtures.TestWithFixtures, unittest.TestCase):
     
     def setUp(self):
         app = Flask(__name__, template_folder=os.path.dirname(__file__))
@@ -90,6 +90,7 @@ class FlaskSolrTestCase(unittest.TestCase, fixtures.TestWithFixtures):
 
         with fake_solr_http_response():
             req = self.solr.create_request("black holes")
+            req = self.solr.set_defaults(req)
             resp = self.solr.get_response(req)
             self.assertEqual(resp.get_hits(), 13)
         
@@ -97,7 +98,7 @@ class FlaskSolrTestCase(unittest.TestCase, fixtures.TestWithFixtures):
         
         with self.app.test_request_context('/'):
             with fake_solr_http_response():
-                resp = solr.query("black holes")
+                resp = solr.query(**{'q': "black holes"})
                 self.assertEqual(resp.get_hits(), 13)
         
     def test_02_solr_request_http_method(self):
@@ -110,7 +111,7 @@ class FlaskSolrTestCase(unittest.TestCase, fixtures.TestWithFixtures):
         with self.app.test_request_context():
             solr.request_http_method = 'POST'
             with fake_solr_http_response():
-                resp = solr.query("black holes")
+                resp = solr.query(**{'q': "black holes"})
                 self.assertEqual(resp.request.prepared.method, 'POST')
             solr.request_http_method = 'GET'
         
