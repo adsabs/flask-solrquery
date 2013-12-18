@@ -92,6 +92,8 @@ class FlaskSolrQuery(object):
         # allow for overriding query url
         if query_url is None:
             req.url = self.query_url
+        else:
+            req.url = query_url
             
         # add any configured extra params that are sent with every request
         if self.extra_params is not None:
@@ -101,7 +103,7 @@ class FlaskSolrQuery(object):
         req.method=self.request_http_method
         return req
         
-    def query(self, query_url=None, **kwargs):
+    def query(self, q, query_url=None, **kwargs):
         """Just a helper method for querying solr
         Creates a request object and sends it
         to the create_request() method. If you 
@@ -109,7 +111,7 @@ class FlaskSolrQuery(object):
         request object yourself
         """
         
-        req = self.create_request(**kwargs)
+        req = self.create_request(q, **kwargs)
         req = self.set_defaults(req, query_url)
         return self.get_response(req)
 
