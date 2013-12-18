@@ -216,7 +216,7 @@ class SearchRequest(object):
         if (method or self.method) == 'GET' and (data or self.data):
             raise Exception("You must set method to POST if you are sending data")
         
-        r = requests.Request(method=method or self.method, 
+        r = requests.Request(method=method or self.method or 'GET', 
                              url=url or self.url, 
                              params=self.params.get_dict(),
                              headers=headers or self.headers,
