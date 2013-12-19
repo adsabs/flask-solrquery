@@ -6,7 +6,7 @@ flask.ext.solr
 Provides solr search capabilities for you app
 """
 
-__version__ = '0.01'
+__version__ = '0.02'
 __versionfull__ = __version__
 
 import re
