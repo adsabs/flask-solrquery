@@ -88,11 +88,34 @@ class FlaskSolrQuery(object):
     def add_request_adapter(self, scheme, adapter):
         self.session.mount(scheme, adapter)
         
+    def set_defaults(self, req, query_url=None):
+        # allow for overriding query url
+        if query_url is None:
+            req.url = self.query_url
+        else:
+            req.url = query_url
+            
+        # add any configured extra params that are sent with every request
+        if self.extra_params is not None:
+            extra = dict(self.extra_params)
+            req.set_params(**extra)
+        
+        req.method=self.request_http_method
+        return req
+        
     def query(self, q, query_url=None, **kwargs):
+        """Just a helper method for querying solr
+        Creates a request object and sends it
+        to the create_request() method. If you 
+        need something extra, you can create the
+        request object yourself
+        """
+        
         req = self.create_request(q, **kwargs)
-        return self.get_response(req, query_url)
+        req = self.set_defaults(req, query_url)
+        return self.get_response(req)
 
-    def create_request(self, q, rows=None, start=None, sort=[], query_fields=None, 
+    def create_request(self, q=None, rows=None, start=None, sort=[], query_fields=None, 
               filter_queries=[], fields=[], facets=[], highlights=[], **kwargs):
         """
         q - search terms as a string (str)
@@ -139,19 +162,10 @@ class FlaskSolrQuery(object):
             
         return req        
     
-    def get_response(self, req, query_url=None):
+    def get_response(self, req):
         
-        # allow for overriding query url
-        if query_url is None:
-            query_url = self.query_url
-            
-        # add any configured extra params that are sent with every request
-        if self.extra_params is not None:
-            extra = dict(self.extra_params)
-            req.set_params(**extra)
+        prepared_req = req.prepare()
         
-        prepared_req = req.prepare(query_url, method=self.request_http_method)
-
         try:
             http_resp = self.session.send(prepared_req, timeout=self.timeout)
             resp = self.response_loader(http_resp.json(), request=req, http_response=http_resp)
@@ -173,8 +187,47 @@ class SearchRequest(object):
         self.q = q
         self.params = SearchParams(q=q, **kwargs)
         
-    def prepare(self, solr_url, method='GET'):
-        r = requests.Request(method, solr_url, params=self.params.get_dict())
+        #these are the request params (not exposed
+        #directly, since this class encapsulates only
+        #solr parameters (but they should be available
+        #in case you need to change them
+        self.url = None
+        self.method = None
+        self.headers=None
+        self.files=None
+        self.data=None
+        self.auth=None
+        self.cookies=None
+        self.hooks=None
+                
+        
+    def prepare(self, url=None, 
+                method=None,
+                headers=None,
+                files=None,
+                data=None,
+                auth=None,
+                cookies=None,
+                hooks=None):
+        
+        """Prepares the Requests request - this will be
+        send to the remote web service. Beware, if method
+        is GET, then data cannot be sent!
+        """
+        
+        if (method or self.method) == 'GET' and (data or self.data):
+            raise Exception("You must set method to POST if you are sending data")
+        
+        r = requests.Request(method=method or self.method or 'GET', 
+                             url=url or self.url, 
+                             params=self.params.get_dict(),
+                             headers=headers or self.headers,
+                             files=files or self.files,
+                             data=data or self.data,
+                             auth=auth or self.auth,
+                             cookies=cookies or self.cookies, 
+                             hooks=hooks or self.hooks)
+        
         self.prepared = r.prepare()
         self.url = self.prepared.url
         return self.prepared
