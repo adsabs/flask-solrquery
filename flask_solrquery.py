@@ -165,7 +165,8 @@ class FlaskSolrQuery(object):
     def get_response(self, req):
         
         prepared_req = req.prepare()
-        
+        if 'Content-Type' not in prepared_req.headers:
+          prepared_req.headers = {'Content-Type':'application/x-www-form-urlencoded'}
         try:
             http_resp = self.session.send(prepared_req, timeout=self.timeout)
             resp = self.response_loader(http_resp.json(), request=req, http_response=http_resp)
